@@ -1,0 +1,287 @@
+CENIQA PROJECT STRUCTURE
+========================
+
+ceniqa_project/
+│
+├── Core Components
+│   ├── config.py              (Config management, ModelConfig dataclass)
+│   ├── model.py               (Main CENIQA model, combines all components)
+│   └── losses.py              (Combined training loss functions)
+│
+├── Architecture Components
+│   ├── backbones.py           (CNN, ViT, Swin, UNet backbones)
+│   ├── extractors.py          (Multi-scale, Frequency, Patch-wise features)
+│   ├── gmm_module.py          (Differentiable Gaussian Mixture Model)
+│   └── regressors.py          (MLP, KAN, Transformer, GRU, Attention heads)
+│
+├── Data & Training
+│   ├── dataset.py             (IQADataset with distortion augmentation)
+│   ├── train.py               (Main training script)
+│   ├── train_utils.py         (Trainer class, validators)
+│   └── experiments.py         (Experiment configurations)
+│
+├── Inference & Evaluation
+│   └── inference.py           (Inference wrapper, batch prediction)
+│
+├── Configuration & Docs
+│   ├── requirements.txt       (Dependencies)
+│   ├── configs/
+│   │   └── default.json       (Example configuration)
+│   ├── README.md              (Full documentation)
+│   ├── QUICKSTART.py          (This quick start guide)
+│   └── PROJECT_STRUCTURE.txt  (This file)
+│
+└── Output Directory (created during training)
+    └── experiments/
+        └── {experiment_name}/
+            ├── config.json
+            ├── best_model.pth
+            ├── checkpoint_epoch_*.pth
+            └── test_results.txt
+
+
+FILE DESCRIPTIONS
+=================
+
+config.py
+---------
+• ModelConfig: dataclass with all hyperparameters
+• load_config(): load JSON config
+• save_config(): save config to JSON
+Lines: ~120
+
+backbones.py
+-----------
+• CNNBackbone: ResNet, EfficientNet
+• ViTBackbone: Vision Transformer
+• SwinBackbone: Swin Transformer
+• UNetBackbone: Custom UNet
+• build_backbone(): factory function
+Lines: ~180
+
+extractors.py
+-------------
+• MultiScaleFeatureExtractor: 3-scale features
+• FrequencyFeatureExtractor: DCT-based features
+• PatchWiseQualityExtractor: patch-level features
+Lines: ~130
+
+gmm_module.py
+-------------
+• DifferentiableGMM: learnable GMM with parameters
+• fit_sklearn(): initialize from sklearn GMM
+• get_cluster_assignments(): hard assignments
+Lines: ~120
+
+regressors.py
+-------------
+• MonotonicMLP: MLP with monotonic constraints
+• KANLayer: Kolmogorov-Arnold layer
+• KANRegressor: KAN-based regressor
+• TransformerRegressor: Transformer decoder
+• GRURegressor: GRU-based regressor
+• AttentionRegressor: Attention-based regressor
+• build_regressor(): factory function
+Lines: ~250
+
+model.py
+--------
+• CENIQA: main model combining all components
+• extract_features(): feature extraction
+• forward(): main forward pass
+• get_cluster_assignments(): clustering
+Lines: ~140
+
+losses.py
+---------
+• CENIQALoss: combined loss
+• contrastive_loss(): similarity-based
+• cluster_consistency_loss(): clustering loss
+• monotonic_loss(): monotonicity constraint
+• ranking_loss(): pairwise ranking
+Lines: ~150
+
+dataset.py
+----------
+• IQADataset: PyTorch Dataset class
+• apply_distortion(): synthetic distortion
+• get_train_transform(): training augmentations
+• get_val_transform(): validation transforms
+Lines: ~160
+
+train_utils.py
+--------------
+• Trainer: training loop manager
+• train_epoch(): epoch training
+• validate(): validation metrics
+• update_gmm(): GMM update
+• save/load_checkpoint()
+• compute_metrics(): SRCC, PLCC, RMSE
+Lines: ~220
+
+train.py
+--------
+• set_seed(): reproducibility
+• main(): training entry point
+• Command line arguments
+Lines: ~180
+
+inference.py
+------------
+• CENIQAInference: inference wrapper
+• predict(): single image
+• predict_batch(): batch images
+• get_cluster_info(): cluster info
+• main(): CLI interface
+Lines: ~180
+
+experiments.py
+--------------
+• EXPERIMENTS: dict of experiment configs
+• create_experiment_config(): config factory
+• save_experiment_configs(): save JSON configs
+• list_experiments(): display available
+Lines: ~160
+
+
+DATAFLOW
+========
+
+Training:
+  Image → IQADataset → Backbone → Multi-scale/Frequency Features
+  → Feature Projection → GMM Posteriors → [Features + Posteriors]
+  → Regressor → Quality Score (0-1)
+
+Auxiliary tasks (self-supervised):
+  [Features] → Distortion Classifier (10-way)
+  [Features] → Ranking Head (scalar)
+
+Loss computation:
+  Quality Loss + Contrastive Loss + Consistency Loss +
+  Ranking Loss + Cluster Loss + Monotonic Loss = Total Loss
+
+
+CONFIGURATION HIERARCHY
+=======================
+
+1. Backbone Selection
+   - CNN (ResNet50, EfficientNet)
+   - ViT (vit_small_patch16_224)
+   - Swin (swin_tiny_patch4_window7_224)
+   - UNet (custom implementation)
+
+2. Feature Extraction
+   - Multi-scale: YES/NO (3 scales: 1.0, 0.75, 0.5)
+   - Frequency domain: YES/NO (DCT-based)
+   - Patch-wise: integrated in dataset
+
+3. GMM Clustering
+   - n_clusters: 4, 6, 8, 10, 12
+   - BIC selection: auto select best K
+   - Update frequency: every N epochs
+
+4. Regression Head
+   - MLP (with monotonic constraint)
+   - KAN (Kolmogorov-Arnold Network)
+   - Transformer (self-attention)
+   - GRU (recurrent)
+   - Attention (attention mechanism)
+
+5. Training
+   - Optimizer: AdamW
+   - Scheduler: Cosine, OneCycle
+   - Loss weights: configurable
+
+
+EXPERIMENT CONFIGURATIONS
+=========================
+
+Backbone ablations:
+  baseline_vit, baseline_resnet, baseline_swin, baseline_unet
+
+Regressor ablations:
+  regressor_kan, regressor_transformer, regressor_gru, regressor_attention
+
+GMM ablations:
+  clusters_4, clusters_6, clusters_10, clusters_12
+
+Component ablations:
+  no_multiscale, no_frequency, no_monotonic
+
+Total: 16 predefined experiments
+
+
+QUICK COMMANDS
+==============
+
+# List all experiments
+python experiments.py
+
+# Generate all config files
+python experiments.py
+
+# Train with default config
+python train.py
+
+# Train specific experiment
+python train.py --config configs/baseline_vit.json
+
+# Train with custom params
+python train.py --backbone vit_small_patch16_224 --epochs 100
+
+# Inference single image
+python inference.py --checkpoint path/to/model.pth --config path/to/config.json --image test.jpg
+
+# Inference batch
+python inference.py --checkpoint path/to/model.pth --config path/to/config.json --image ./images/
+
+
+DEPENDENCIES
+============
+Core:
+  - torch >= 2.0.0
+  - torchvision >= 0.15.0
+  - numpy >= 1.21.0
+
+Models:
+  - timm >= 0.9.0
+  - einops >= 0.6.0
+
+Data processing:
+  - pandas >= 1.3.0
+  - Pillow >= 8.3.0
+  - scipy >= 1.7.0
+
+ML utilities:
+  - scikit-learn >= 0.24.0
+
+Monitoring:
+  - wandb >= 0.12.0 (optional)
+
+
+TYPICAL WORKFLOW
+================
+
+1. Setup
+   $ pip install -r requirements.txt
+   $ python experiments.py
+
+2. Data Preparation
+   - Create data/ folder with train/val/test CSV files
+   - CSV format: image_path, mos
+
+3. Training
+   $ python train.py --config configs/baseline_vit.json \
+                     --data_root ./data \
+                     --train_csv ./data/train.csv \
+                     --val_csv ./data/val.csv \
+                     --test_csv ./data/test.csv
+
+4. Results
+   - Best model: experiments/{exp_name}/best_model.pth
+   - Metrics: experiments/{exp_name}/test_results.txt
+
+5. Inference
+   $ python inference.py --checkpoint experiments/{exp_name}/best_model.pth \
+                         --config experiments/{exp_name}/config.json \
+                         --image test_image.jpg
