@@ -28,12 +28,12 @@ def load_model(checkpoint_path, config_path, device):
         config = json.load(f)
 
     model = SimpleCNNGMMMLPModel(
-        backbone_name=config['model']['backbone'],
-        feature_dim=config['model']['feature_dim'],
-        n_clusters=config['model']['n_clusters'],
-        hidden_dim=config['model']['hidden_dim'],
-        dropout=config['model']['dropout'],
-        freeze_backbone=config['model']['freeze_backbone']
+        backbone_name=config['backbone'],
+        feature_dim=config['feature_dim'],
+        n_clusters=config['n_clusters'],
+        hidden_dim=config['hidden_dim'],
+        dropout=config.get('dropout', config.get('dropout_rate', 0.2)),
+        freeze_backbone=config['freeze_backbone']
     )
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
@@ -494,7 +494,7 @@ def main():
     # Load model
     print("\nLoading model...")
     model, config = load_model(checkpoint_path, config_path, device)
-    print(f"Model loaded: {config['model']['backbone']}")
+    print(f"Model loaded: {config['backbone']}")
 
     # Load test dataset
     print("\nLoading test dataset...")
