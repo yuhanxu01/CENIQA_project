@@ -34,7 +34,21 @@ def infer_model_config_from_checkpoint(checkpoint_path, device):
     n_clusters = state_dict['gmm.means'].shape[0]
 
     # Infer hidden_dim from regressor first layer
-    hidden_dim = state_dict['regressor.mlp.0.weight'].shape[0]
+    # MonotonicMLP uses fc1, fc2, fc3 layers
+    if 'regressor.fc1.weight' in state_dict:
+        hidden_dim = state_dict['regressor.fc1.weight'].shape[0]
+    elif 'regressor.mlp.0.weight' in state_dict:
+        hidden_dim = state_dict['regressor.mlp.0.weight'].shape[0]
+    else:
+        # Fallback: try to find any regressor layer
+        regressor_keys = [k for k in state_dict.keys() if k.startswith('regressor.') and 'weight' in k]
+        if regressor_keys:
+            first_layer_key = sorted(regressor_keys)[0]
+            hidden_dim = state_dict[first_layer_key].shape[0]
+        else:
+            # Default fallback
+            hidden_dim = 512
+            print(f"Warning: Could not infer hidden_dim, using default: {hidden_dim}")
 
     # Try to infer backbone name from the checkpoint or use default
     # Check the backbone model structure
