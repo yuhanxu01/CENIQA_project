@@ -17,12 +17,22 @@ from distorted_dataset import DistortedImageDataset
 from train_gpu_v2 import SimpleCNNGMMMLPModel, refit_gmm, validate, save_checkpoint
 
 
-def train_epoch(model, dataloader, optimizer, criterion, device, cluster_loss_weight=0.5):
-    """Train for one epoch."""
+def train_epoch(model, dataloader, optimizer, criterion, device,
+                cluster_loss_weight=0.5, balance_weight=1.0, entropy_weight=0.1):
+    """
+    Train for one epoch with improved regularization.
+
+    Args:
+        cluster_loss_weight: Weight for cluster separation loss
+        balance_weight: Weight for uniform cluster distribution regularization
+        entropy_weight: Weight for entropy regularization
+    """
     model.train()
     total_loss = 0
     total_quality_loss = 0
     total_cluster_loss = 0
+    total_balance_loss = 0
+    total_entropy_loss = 0
 
     pbar = tqdm(dataloader, desc='Training')
     for images, scores in pbar:
@@ -33,19 +43,35 @@ def train_epoch(model, dataloader, optimizer, criterion, device, cluster_loss_we
         predictions = outputs['quality_score']
         posteriors = outputs['posteriors']
 
-        # Quality loss
+        # 1. Quality loss (主要任务)
         quality_loss = criterion(predictions, scores)
 
-        # Cluster separation loss with entropy regularization
+        # 2. Cluster separation loss (鼓励明确的聚类分配)
         max_posteriors = torch.max(posteriors, dim=1)[0]
         cluster_loss = -torch.mean(max_posteriors)
 
-        # Entropy regularization
+        # 3. Uniform distribution regularization (鼓励均匀的聚类分布)
+        # 计算batch中每个聚类的平均后验概率
+        cluster_distribution = torch.mean(posteriors, dim=0)  # [n_clusters]
+        n_clusters = posteriors.shape[1]
+        uniform_distribution = torch.ones(n_clusters, device=device) / n_clusters
+
+        # 使用KL散度惩罚偏离均匀分布
+        balance_loss = torch.sum(
+            cluster_distribution * torch.log(
+                (cluster_distribution + 1e-10) / (uniform_distribution + 1e-10)
+            )
+        )
+
+        # 4. Entropy regularization (防止过度自信)
         entropy = -torch.sum(posteriors * torch.log(posteriors + 1e-10), dim=1).mean()
-        cluster_loss = cluster_loss + 0.1 * entropy
+        entropy_loss = -entropy  # 负号因为我们想要更高的熵
 
         # Combined loss
-        loss = quality_loss + cluster_loss_weight * cluster_loss
+        loss = (quality_loss +
+                cluster_loss_weight * cluster_loss +
+                balance_weight * balance_loss +
+                entropy_weight * entropy_loss)
 
         optimizer.zero_grad()
         loss.backward()
@@ -54,17 +80,22 @@ def train_epoch(model, dataloader, optimizer, criterion, device, cluster_loss_we
         total_loss += loss.item()
         total_quality_loss += quality_loss.item()
         total_cluster_loss += cluster_loss.item()
+        total_balance_loss += balance_loss.item()
+        total_entropy_loss += entropy_loss.item()
 
         pbar.set_postfix({
             'loss': f'{loss.item():.4f}',
             'q_loss': f'{quality_loss.item():.4f}',
-            'c_loss': f'{cluster_loss.item():.4f}'
+            'c_loss': f'{cluster_loss.item():.4f}',
+            'b_loss': f'{balance_loss.item():.4f}'
         })
 
     return {
         'total_loss': total_loss / len(dataloader),
         'quality_loss': total_quality_loss / len(dataloader),
-        'cluster_loss': total_cluster_loss / len(dataloader)
+        'cluster_loss': total_cluster_loss / len(dataloader),
+        'balance_loss': total_balance_loss / len(dataloader),
+        'entropy_loss': total_entropy_loss / len(dataloader)
     }
 
 
@@ -89,16 +120,20 @@ def main():
                        help='Number of training epochs')
     parser.add_argument('--lr', type=float, default=1e-3,
                        help='Learning rate')
-    parser.add_argument('--refit_interval', type=int, default=10,
-                       help='GMM refit interval (epochs)')
-    parser.add_argument('--cluster_loss_weight', type=float, default=0.5,
-                       help='Weight for cluster loss')
+    parser.add_argument('--refit_interval', type=int, default=0,
+                       help='GMM refit interval (epochs), 0=disabled')
+    parser.add_argument('--cluster_loss_weight', type=float, default=0.1,
+                       help='Weight for cluster separation loss')
+    parser.add_argument('--balance_weight', type=float, default=1.0,
+                       help='Weight for uniform cluster distribution regularization')
+    parser.add_argument('--entropy_weight', type=float, default=0.1,
+                       help='Weight for entropy regularization')
     parser.add_argument('--device', type=str, default='cuda',
                        help='Device to use')
     args = parser.parse_args()
 
     print("="*60)
-    print(f"Training with Distorted Images")
+    print(f"Training with Distorted Images (Improved)")
     print("="*60)
     print(f"Experiment: {args.experiment_name}")
     print(f"Backbone: {args.backbone}")
@@ -107,6 +142,11 @@ def main():
           f"{args.train_samples * (args.distortions_per_image + 1)}")
     print(f"Val samples: {args.val_samples} x {args.distortions_per_image + 1} = "
           f"{args.val_samples * (args.distortions_per_image + 1)}")
+    print("\nRegularization:")
+    print(f"  - Cluster separation weight: {args.cluster_loss_weight}")
+    print(f"  - Balance weight: {args.balance_weight}")
+    print(f"  - Entropy weight: {args.entropy_weight}")
+    print(f"  - GMM refit interval: {args.refit_interval if args.refit_interval > 0 else 'Disabled'}")
     print("="*60)
 
     # Setup device
@@ -206,15 +246,17 @@ def main():
         print(f"\nEpoch {epoch+1}/{args.epochs}")
         print("-" * 40)
 
-        # Re-fit GMM periodically
-        if epoch > 0 and epoch % args.refit_interval == 0:
+        # Re-fit GMM periodically (only if enabled)
+        if args.refit_interval > 0 and epoch > 0 and epoch % args.refit_interval == 0:
             print(f"\n[Epoch {epoch+1}] Re-fitting GMM...")
             refit_gmm(model, train_loader, device)
 
         # Train
         train_metrics = train_epoch(
             model, train_loader, optimizer, criterion, device,
-            cluster_loss_weight=args.cluster_loss_weight
+            cluster_loss_weight=args.cluster_loss_weight,
+            balance_weight=args.balance_weight,
+            entropy_weight=args.entropy_weight
         )
 
         # Validate
@@ -226,6 +268,10 @@ def main():
 
         # Log metrics
         print(f"\nTrain Loss: {train_metrics['total_loss']:.4f}")
+        print(f"  - Quality Loss: {train_metrics['quality_loss']:.4f}")
+        print(f"  - Cluster Loss: {train_metrics['cluster_loss']:.4f}")
+        print(f"  - Balance Loss: {train_metrics['balance_loss']:.4f}")
+        print(f"  - Entropy Loss: {train_metrics['entropy_loss']:.4f}")
         print(f"Val Loss: {val_metrics['loss']:.4f}")
         print(f"SRCC: {val_metrics['srcc']:.4f}")
         print(f"PLCC: {val_metrics['plcc']:.4f}")
@@ -236,6 +282,10 @@ def main():
         history_entry = {
             'epoch': int(epoch + 1),
             'train_loss': float(train_metrics['total_loss']),
+            'quality_loss': float(train_metrics['quality_loss']),
+            'cluster_loss': float(train_metrics['cluster_loss']),
+            'balance_loss': float(train_metrics['balance_loss']),
+            'entropy_loss': float(train_metrics['entropy_loss']),
             'val_loss': float(val_metrics['loss']),
             'srcc': float(val_metrics['srcc']),
             'plcc': float(val_metrics['plcc']),
