@@ -19,7 +19,8 @@ from matplotlib.patches import Rectangle
 import seaborn as sns
 from scipy.stats import spearmanr, pearsonr
 
-from train_gpu import SimpleCNNGMMMLPModel, HuggingFaceImageDataset
+from train_gpu import SimpleCNNGMMMLPModel
+from distorted_dataset import DistortedImageDataset
 
 
 def infer_model_config_from_checkpoint(checkpoint_path, device):
@@ -596,11 +597,13 @@ def main():
     model, config = load_model(checkpoint_path, config_path, device)
     print(f"Model loaded: {config['backbone']}")
 
-    # Load test dataset
+    # Load test dataset (使用正确的DistortedImageDataset！)
     print("\nLoading test dataset...")
-    test_dataset = HuggingFaceImageDataset(
+    test_dataset = DistortedImageDataset(
         split='test',
-        max_samples=args.test_samples
+        max_samples=args.test_samples // 6,  # 因为每个参考图像生成6个样本
+        distortions_per_image=5,
+        include_pristine=True
     )
     test_loader = DataLoader(
         test_dataset,
