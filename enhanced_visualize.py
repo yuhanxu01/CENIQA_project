@@ -352,14 +352,24 @@ def plot_comprehensive_metrics(predictions, targets, cluster_ids, posteriors, sa
     for i in range(n_clusters):
         mask = cluster_ids == i
         if mask.sum() > 0:
-            cluster_quality_data.append(predictions[mask])
-            cluster_positions.append(i)
+            data = predictions[mask]
+            # Only add if data is valid and non-empty
+            if len(data) > 0 and not np.all(np.isnan(data)):
+                cluster_quality_data.append(data)
+                cluster_positions.append(i)
 
-    bp = ax_quality_dist.boxplot(cluster_quality_data, positions=cluster_positions,
-                                 widths=0.6, patch_artist=True, showfliers=True)
-    for patch, color in zip(bp['boxes'], colors_cluster[cluster_positions]):
-        patch.set_facecolor(color)
-        patch.set_alpha(0.7)
+    # Only create boxplot if we have data
+    if len(cluster_quality_data) > 0 and len(cluster_quality_data) == len(cluster_positions):
+        bp = ax_quality_dist.boxplot(cluster_quality_data, positions=cluster_positions,
+                                     widths=0.6, patch_artist=True, showfliers=True)
+        # Use numpy array indexing for colors
+        cluster_colors = [colors_cluster[pos] for pos in cluster_positions]
+        for patch, color in zip(bp['boxes'], cluster_colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+    else:
+        ax_quality_dist.text(0.5, 0.5, 'No valid data for boxplot',
+                            ha='center', va='center', transform=ax_quality_dist.transAxes)
 
     ax_quality_dist.set_xlabel('Cluster ID', fontsize=12)
     ax_quality_dist.set_ylabel('Predicted Quality Score', fontsize=12)
