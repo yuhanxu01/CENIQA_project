@@ -130,6 +130,8 @@ class DistortedImageDataset(Dataset):
             distorted_img: PIL Image
             quality_score: float (0-100, higher = better quality)
         """
+        # Make a deep copy to ensure independence
+        img = img.copy()
         img_array = np.array(img)
 
         if distortion_type == 'gaussian_blur':
@@ -165,8 +167,11 @@ class DistortedImageDataset(Dataset):
             buffer = io.BytesIO()
             img_pil.save(buffer, format='JPEG', quality=quality)
             buffer.seek(0)
+            # Load the image data immediately to avoid buffer issues
             distorted_pil = Image.open(buffer)
+            distorted_pil.load()  # Force loading image data from buffer
             distorted = np.array(distorted_pil)
+            buffer.close()  # Explicitly close buffer after loading
             quality_score = quality * 0.8 + 20  # Approximate quality based on compression
 
         elif distortion_type == 'color_saturation':
@@ -261,10 +266,12 @@ def visualize_distortions():
     from datasets import load_dataset
 
     # Load one sample image
+    print("Loading sample image from CIFAR-10...")
     dataset = load_dataset("cifar10", split='train')
     img = dataset[0]['img']
     if img.mode != 'RGB':
         img = img.convert('RGB')
+    print(f"Image loaded: size={img.size}, mode={img.mode}")
 
     # Create dataset instance for distortion application
     temp_dataset = DistortedImageDataset.__new__(DistortedImageDataset)
@@ -280,19 +287,51 @@ def visualize_distortions():
     for i in range(1, 4):
         axes[0, i].axis('off')
 
-    # Each distortion type
+    # Track success/failure
+    success_count = 0
+    failure_count = 0
+    failed_distortions = []
+
+    # Each distortion type with error handling
+    print("\nApplying distortions:")
     for row, dist_type in enumerate(DistortedImageDataset.DISTORTION_TYPES, start=1):
+        print(f"\n  {row}. {dist_type}:")
         for col, level in enumerate([0.3, 0.5, 0.7, 0.9]):
-            distorted_img, quality_score = temp_dataset.apply_distortion(
-                img.copy(), dist_type, level
-            )
-            axes[row, col].imshow(distorted_img)
-            axes[row, col].set_title(f'{dist_type}\nlevel={level:.1f}, Q={quality_score:.1f}')
-            axes[row, col].axis('off')
+            try:
+                # Make a fresh copy of the original image for each distortion
+                img_copy = img.copy()
+                distorted_img, quality_score = temp_dataset.apply_distortion(
+                    img_copy, dist_type, level
+                )
+                axes[row, col].imshow(distorted_img)
+                axes[row, col].set_title(f'{dist_type}\nlevel={level:.1f}, Q={quality_score:.1f}',
+                                        fontsize=8)
+                axes[row, col].axis('off')
+                print(f"    ✓ level={level:.1f} -> Q={quality_score:.1f}")
+                success_count += 1
+            except Exception as e:
+                # Display error in the plot
+                axes[row, col].text(0.5, 0.5, f'ERROR\n{str(e)[:30]}...',
+                                   ha='center', va='center', fontsize=6, color='red',
+                                   transform=axes[row, col].transAxes)
+                axes[row, col].set_title(f'{dist_type}\nlevel={level:.1f}\nFAILED',
+                                        fontsize=8, color='red')
+                axes[row, col].axis('off')
+                print(f"    ✗ level={level:.1f} FAILED: {str(e)}")
+                failure_count += 1
+                if dist_type not in failed_distortions:
+                    failed_distortions.append(dist_type)
 
     plt.tight_layout()
     plt.savefig('distortion_examples.png', dpi=150, bbox_inches='tight')
-    print("Saved distortion examples to: distortion_examples.png")
+    print("\n" + "="*60)
+    print(f"Visualization complete!")
+    print(f"  Success: {success_count}")
+    print(f"  Failures: {failure_count}")
+    if failed_distortions:
+        print(f"  Failed distortion types: {', '.join(failed_distortions)}")
+    print(f"\nSaved to: distortion_examples.png")
+    print("="*60)
     plt.show()
 
 
