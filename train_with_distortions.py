@@ -14,7 +14,54 @@ from tqdm import tqdm
 import time
 
 from distorted_dataset import DistortedImageDataset
-from train_gpu_v2 import SimpleCNNGMMMLPModel, refit_gmm, validate, save_checkpoint
+from train_gpu import SimpleCNNGMMMLPModel, validate, save_checkpoint
+
+
+def refit_gmm(model, dataloader, device):
+    """
+    Re-fit GMM with current features from the backbone.
+
+    Args:
+        model: The CNN+GMM+MLP model
+        dataloader: DataLoader to collect features from
+        device: Device to use (cuda or cpu)
+    """
+    model.eval()
+    all_features = []
+    all_scores = []
+
+    with torch.no_grad():
+        for images, scores in tqdm(dataloader, desc='Re-fitting GMM'):
+            images = images.to(device)
+            features = model.backbone(images)
+            all_features.append(features.cpu().numpy())
+            all_scores.append(scores.numpy())
+
+    all_features = np.concatenate(all_features, axis=0)
+    all_scores = np.concatenate(all_scores, axis=0)
+
+    # Re-fit GMM with sklearn
+    try:
+        model.gmm.fit_sklearn(all_features)
+        print(f"GMM re-fitted with {len(all_features)} samples")
+
+        # Analyze cluster distribution
+        model.eval()
+        with torch.no_grad():
+            features_tensor = torch.from_numpy(all_features).float().to(device)
+            posteriors = model.gmm(features_tensor)
+            cluster_assignments = torch.argmax(posteriors, dim=1).cpu().numpy()
+
+        print("\nCluster distribution after re-fitting:")
+        for k in range(model.gmm.n_clusters):
+            mask = cluster_assignments == k
+            count = mask.sum()
+            avg_quality = all_scores[mask].mean() if count > 0 else 0
+            print(f"  Cluster {k}: {count:4d} samples (avg quality: {avg_quality:.3f})")
+
+    except Exception as e:
+        print(f"Warning: GMM fitting failed: {e}")
+        print("Skipping GMM re-fitting for this epoch.")
 
 
 def train_epoch(model, dataloader, optimizer, criterion, device,

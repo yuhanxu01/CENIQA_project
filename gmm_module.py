@@ -67,12 +67,15 @@ class DifferentiableGMM(nn.Module):
             init_params='k-means++'
         )
         gmm.fit(features)
-        
-        # Copy parameters
-        self.means.data = torch.from_numpy(gmm.means_).float()
+
+        # Get current device of model parameters
+        device = self.means.device
+
+        # Copy parameters and ensure they're on the correct device
+        self.means.data = torch.from_numpy(gmm.means_).float().to(device)
         if self.covariance_type == 'diag':
-            self.log_vars.data = torch.log(torch.from_numpy(gmm.covariances_).float())
-        self.log_weights.data = torch.log(torch.from_numpy(gmm.weights_).float())
+            self.log_vars.data = torch.log(torch.from_numpy(gmm.covariances_).float()).to(device)
+        self.log_weights.data = torch.log(torch.from_numpy(gmm.weights_).float()).to(device)
     
     def get_cluster_assignments(self, x):
         """Get hard cluster assignments."""
