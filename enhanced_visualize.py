@@ -22,21 +22,97 @@ from scipy.stats import spearmanr, pearsonr
 from train_gpu import SimpleCNNGMMMLPModel, HuggingFaceImageDataset
 
 
+def infer_model_config_from_checkpoint(checkpoint_path, device):
+    """Infer model configuration from checkpoint state dict."""
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    state_dict = checkpoint['model_state_dict']
+
+    # Infer feature_dim from backbone projection layer
+    feature_dim = state_dict['backbone.proj.weight'].shape[0]
+
+    # Infer n_clusters from GMM parameters
+    n_clusters = state_dict['gmm.means'].shape[0]
+
+    # Infer hidden_dim from regressor first layer
+    hidden_dim = state_dict['regressor.mlp.0.weight'].shape[0]
+
+    # Try to infer backbone name from the checkpoint or use default
+    # Check the backbone model structure
+    backbone_keys = [k for k in state_dict.keys() if k.startswith('backbone.model.')]
+    if any('resnet' in k.lower() for k in backbone_keys):
+        if 'layer4' in str(backbone_keys):
+            # Count layers to determine resnet variant
+            backbone_name = 'resnet18'  # default
+        else:
+            backbone_name = 'resnet18'
+    else:
+        backbone_name = 'resnet18'  # default fallback
+
+    return {
+        'backbone': backbone_name,
+        'feature_dim': feature_dim,
+        'n_clusters': n_clusters,
+        'hidden_dim': hidden_dim,
+        'dropout': 0.3,
+        'freeze_backbone': False
+    }, checkpoint
+
+
 def load_model(checkpoint_path, config_path, device):
     """Load trained model from checkpoint."""
-    with open(config_path, 'r') as f:
-        config = json.load(f)
+    # Try to load config file
+    config = None
+    if config_path.exists():
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load config file: {e}")
 
+    # If config doesn't exist or is missing keys, infer from checkpoint
+    if config is None:
+        print("Config file not found, inferring configuration from checkpoint...")
+        config, checkpoint = infer_model_config_from_checkpoint(checkpoint_path, device)
+    else:
+        # Try to get values from config, with fallback to inference
+        checkpoint = None
+        required_keys = ['backbone', 'feature_dim', 'n_clusters', 'hidden_dim']
+
+        # Check if config has nested 'model' key structure
+        if 'model' in config and isinstance(config['model'], dict):
+            config = config['model']
+
+        # Check if all required keys are present
+        missing_keys = [k for k in required_keys if k not in config]
+        if missing_keys:
+            print(f"Warning: Config missing keys {missing_keys}, inferring from checkpoint...")
+            inferred_config, checkpoint = infer_model_config_from_checkpoint(checkpoint_path, device)
+            # Merge with existing config, preferring inferred values for missing keys
+            for key in missing_keys:
+                config[key] = inferred_config[key]
+
+    # Ensure dropout key exists
+    if 'dropout' not in config:
+        config['dropout'] = config.get('dropout_rate', 0.3)
+
+    # Ensure freeze_backbone key exists
+    if 'freeze_backbone' not in config:
+        config['freeze_backbone'] = False
+
+    # Create model
     model = SimpleCNNGMMMLPModel(
         backbone_name=config['backbone'],
         feature_dim=config['feature_dim'],
         n_clusters=config['n_clusters'],
         hidden_dim=config['hidden_dim'],
-        dropout=config.get('dropout', config.get('dropout_rate', 0.2)),
+        dropout=config['dropout'],
         freeze_backbone=config['freeze_backbone']
     )
 
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    # Load checkpoint if not already loaded
+    if checkpoint is None:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
     model.load_state_dict(checkpoint['model_state_dict'])
     model = model.to(device)
     model.eval()
