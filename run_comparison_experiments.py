@@ -74,8 +74,8 @@ def main():
 
     # Configuration
     config = {
-        'train_samples': 1666,
-        'val_samples': 166,
+        'train_samples': 4666,
+        'val_samples': 466,
         'distortions_per_image': 5,
         'batch_size': 64,
         'epochs': 50,
@@ -145,9 +145,9 @@ def main():
             '--batch_size', str(config['batch_size']),
             '--epochs', str(config['epochs']),
             '--lr', str(config['lr']),
-            '--cluster_loss_weight', '0.1',
-            '--balance_weight', '1.0',
-            '--entropy_weight', '0.1',
+            '--cluster_loss_weight', '0',
+            '--balance_weight', '0',
+            '--entropy_weight', '0',
             '--refit_interval', '0'
         ]
 
@@ -169,7 +169,7 @@ def main():
         'python', 'compare_experiments.py',
         '--exp_simple', exp_simple,
         '--exp_gmm', exp_gmm,
-        '--test_samples', '500',
+        '--test_samples', '1000',
         '--batch_size', '64'
     ]
 
