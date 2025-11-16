@@ -12,7 +12,7 @@ from pathlib import Path
 from tqdm import tqdm
 import time
 
-from high_res_distorted_dataset import HighResDistortedDataset
+from high_res_distorted_dataset_lazy import HighResDistortedDatasetLazy as HighResDistortedDataset
 from simple_model import SimpleCNNModel
 from train_gpu import validate, save_checkpoint
 
