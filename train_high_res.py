@@ -71,7 +71,7 @@ class SimpleCNNGMMMLPModel(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x):
+    def forward(self, x, return_all=False):
         # Extract features
         features = self.backbone(x)
 
@@ -90,7 +90,14 @@ class SimpleCNNGMMMLPModel(nn.Module):
         # Predict quality
         quality = self.regressor(combined)
 
-        return quality.squeeze()
+        if return_all:
+            return {
+                'quality_score': quality.squeeze(),
+                'posteriors': cluster_probs,
+                'features': features
+            }
+        else:
+            return quality.squeeze()
 
 
 def validate(model, dataloader, criterion, device):
@@ -177,14 +184,10 @@ def refit_gmm(model, dataloader, device):
         print(f"GMM re-fitted with {len(all_features)} samples")
 
         # Analyze cluster distribution
-        model.eval()
-        with torch.no_grad():
-            features_tensor = torch.from_numpy(all_features).float().to(device)
-            posteriors = model.gmm(features_tensor)
-            cluster_assignments = torch.argmax(posteriors, dim=1).cpu().numpy()
+        cluster_assignments = model.gmm.predict(all_features)
 
         print("\nCluster distribution after re-fitting:")
-        for k in range(model.gmm.n_clusters):
+        for k in range(model.gmm.n_components):
             mask = cluster_assignments == k
             count = mask.sum()
             avg_quality = all_scores[mask].mean() if count > 0 else 0
