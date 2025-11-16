@@ -18,7 +18,7 @@ from pathlib import Path
 from tqdm import tqdm
 import time
 
-from high_res_distorted_dataset import HighResDistortedDataset
+from high_res_distorted_dataset_lazy import HighResDistortedDatasetLazy as HighResDistortedDataset
 from train_gpu import SimpleCNNGMMMLPModel, validate, save_checkpoint
 
 
