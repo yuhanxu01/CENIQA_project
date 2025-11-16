@@ -437,7 +437,7 @@ def train_epoch(model, dataloader, optimizer, device):
         total_loss += loss.item() * images.size(0)
         total_samples += images.size(0)
 
-        if batch_idx % 10 == 0:
+        if batch_idx % 5 == 0:  # 更频繁打印进度
             print(f"  Batch {batch_idx}/{len(dataloader)}, Loss: {loss.item():.4f}")
 
     return total_loss / total_samples
@@ -551,13 +551,13 @@ def main():
     # 创建checkpoints目录
     os.makedirs('checkpoints', exist_ok=True)
 
-    # 数据集
+    # 数据集 - 快速测试配置
     print("\n加载数据集...")
     train_dataset = HighResDistortedDatasetLazy(
         dataset_name='stl10',
         split='train',
-        max_samples=500,  # 减少样本数以加快测试
-        distortions_per_image=4,
+        max_samples=100,  # 减少到100样本快速测试
+        distortions_per_image=2,  # 减少distortion数量
         include_pristine=True,
         distortion_strength='medium'
     )
@@ -565,14 +565,14 @@ def main():
     val_dataset = HighResDistortedDatasetLazy(
         dataset_name='stl10',
         split='test',
-        max_samples=200,
-        distortions_per_image=4,
+        max_samples=50,  # 减少到50样本快速测试
+        distortions_per_image=2,
         include_pristine=True,
         distortion_strength='medium'
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=2)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=2)  # 增大batch size
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
 
     print(f"训练集: {len(train_dataset)} 样本")
     print(f"验证集: {len(val_dataset)} 样本")
@@ -586,8 +586,8 @@ def main():
         '方案5_Complete': CompleteCENIQA(config)
     }
 
-    # 训练参数
-    epochs = 15
+    # 训练参数 - 快速测试：只跑1个epoch
+    epochs = 1
     lr = 1e-4
 
     # 训练所有模型并记录结果
