@@ -58,6 +58,7 @@ class HighResDistortedDataset(Dataset):
         """
         try:
             from datasets import load_dataset
+            import torchvision.datasets as datasets_tv
 
             self.dataset_name = dataset_name
             self.distortion_strength = distortion_strength
@@ -75,9 +76,14 @@ class HighResDistortedDataset(Dataset):
 
             # Load dataset based on name
             if dataset_name == 'stl10':
-                # STL-10: 96x96 images, 10 classes
+                # STL-10: 96x96 images, 10 classes - use torchvision
                 dataset_split = 'train' if split == 'train' else 'test'
-                dataset = load_dataset("stl10", split=dataset_split)
+                print(f"Loading STL-10 from torchvision (split={dataset_split})...")
+                stl10_dataset = datasets_tv.STL10(root='./data', split=dataset_split, download=True)
+
+                # Convert to list format compatible with the rest of the code
+                dataset = [{'image': img, 'label': label} for img, label in stl10_dataset]
+                print(f"Loaded {len(dataset)} images from STL-10")
             elif dataset_name == 'imagenet-1k':
                 # ImageNet-1k: high-res images (usually 200x200+)
                 # Note: This requires authentication, use a subset if not available
@@ -90,7 +96,11 @@ class HighResDistortedDataset(Dataset):
                 raise ValueError(f"Unknown dataset: {dataset_name}")
 
             if max_samples:
-                dataset = dataset.select(range(min(max_samples, len(dataset))))
+                # Handle both list and HuggingFace Dataset formats
+                if hasattr(dataset, 'select'):
+                    dataset = dataset.select(range(min(max_samples, len(dataset))))
+                else:
+                    dataset = dataset[:max_samples]
 
             self.reference_images = []
             self.distorted_images = []
