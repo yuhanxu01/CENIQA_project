@@ -179,7 +179,7 @@ def train_epoch(model, dataloader, optimizer, criterion, device, cluster_loss_we
 
 
 def validate(model, dataloader, criterion, device):
-    """Validate the model."""
+    """Validate the model (supports both GMM and simple models)."""
     from scipy.stats import spearmanr, pearsonr
 
     model.eval()
@@ -195,32 +195,38 @@ def validate(model, dataloader, criterion, device):
 
             outputs = model(images, return_all=True)
             predictions = outputs['quality_score']
-            posteriors = outputs['posteriors']
 
             loss = criterion(predictions, scores)
             total_loss += loss.item()
 
             all_preds.extend(predictions.cpu().numpy())
             all_targets.extend(scores.cpu().numpy())
-            all_posteriors.append(posteriors.cpu().numpy())
+
+            # Only collect posteriors if model has GMM (posteriors in outputs)
+            if 'posteriors' in outputs:
+                all_posteriors.append(outputs['posteriors'].cpu().numpy())
 
     all_preds = np.array(all_preds)
     all_targets = np.array(all_targets)
-    all_posteriors = np.concatenate(all_posteriors, axis=0)
 
     srcc, _ = spearmanr(all_preds, all_targets)
     plcc, _ = pearsonr(all_preds, all_targets)
     rmse = np.sqrt(np.mean((all_preds - all_targets) ** 2))
 
-    return {
+    result = {
         'loss': total_loss / len(dataloader),
         'srcc': srcc,
         'plcc': plcc,
         'rmse': rmse,
         'predictions': all_preds,
-        'targets': all_targets,
-        'posteriors': all_posteriors
+        'targets': all_targets
     }
+
+    # Only include posteriors if they were collected
+    if all_posteriors:
+        result['posteriors'] = np.concatenate(all_posteriors, axis=0)
+
+    return result
 
 
 def load_config(config_path):
