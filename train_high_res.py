@@ -123,10 +123,10 @@ def validate(model, dataloader, criterion, device):
     rmse = np.sqrt(np.mean((predictions - targets) ** 2))
 
     return {
-        'loss': total_loss / len(dataloader),
-        'srcc': srcc,
-        'plcc': plcc,
-        'rmse': rmse
+        'loss': float(total_loss / len(dataloader)),
+        'srcc': float(srcc),
+        'plcc': float(plcc),
+        'rmse': float(rmse)
     }
 
 
