@@ -7,7 +7,7 @@ from backbones import build_backbone
 from gmm_module import DifferentiableGMM
 from regressors import build_regressor
 from config import ModelConfig
-from high_res_distorted_dataset_lazy import LazyHighResDistortedDataset
+from high_res_distorted_dataset_lazy import HighResDistortedDatasetLazy
 import os
 from datetime import datetime
 import json
@@ -407,8 +407,14 @@ def train_epoch(model, dataloader, optimizer, device):
     total_samples = 0
 
     for batch_idx, batch in enumerate(dataloader):
-        images = batch['image'].to(device)
-        scores = batch['score'].to(device)
+        # Handle both tuple and dict formats
+        if isinstance(batch, dict):
+            images = batch['image'].to(device)
+            scores = batch['score'].to(device)
+        else:
+            images, scores = batch
+            images = images.to(device)
+            scores = scores.to(device)
 
         optimizer.zero_grad()
 
@@ -445,8 +451,14 @@ def evaluate(model, dataloader, device):
 
     with torch.no_grad():
         for batch in dataloader:
-            images = batch['image'].to(device)
-            scores = batch['score'].to(device)
+            # Handle both tuple and dict formats
+            if isinstance(batch, dict):
+                images = batch['image'].to(device)
+                scores = batch['score'].to(device)
+            else:
+                images, scores = batch
+                images = images.to(device)
+                scores = scores.to(device)
 
             outputs = model(images)
             if isinstance(outputs, dict):
@@ -541,20 +553,22 @@ def main():
 
     # 数据集
     print("\n加载数据集...")
-    train_dataset = LazyHighResDistortedDataset(
-        root_dir='data/stl10',
+    train_dataset = HighResDistortedDatasetLazy(
+        dataset_name='stl10',
         split='train',
-        num_samples=500,  # 减少样本数以加快测试
-        distortion_types=['blur', 'noise', 'jpeg', 'contrast'],
-        cache_size=100
+        max_samples=500,  # 减少样本数以加快测试
+        distortions_per_image=4,
+        include_pristine=True,
+        distortion_strength='medium'
     )
 
-    val_dataset = LazyHighResDistortedDataset(
-        root_dir='data/stl10',
+    val_dataset = HighResDistortedDatasetLazy(
+        dataset_name='stl10',
         split='test',
-        num_samples=200,
-        distortion_types=['blur', 'noise', 'jpeg', 'contrast'],
-        cache_size=50
+        max_samples=200,
+        distortions_per_image=4,
+        include_pristine=True,
+        distortion_strength='medium'
     )
 
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2)
