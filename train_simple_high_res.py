@@ -177,9 +177,14 @@ def main():
               f"PLCC: {val_metrics['plcc']:.4f} | "
               f"RMSE: {val_metrics['rmse']:.4f}")
 
-        # Save history
-        history['train'].append(train_metrics)
-        history['val'].append(val_metrics)
+        # Save history (convert numpy types to Python types for JSON serialization)
+        train_record = {k: float(v) if isinstance(v, (float, int)) or hasattr(v, 'item') else v
+                       for k, v in train_metrics.items() if k not in ['predictions', 'targets', 'posteriors']}
+        val_record = {k: float(v) if isinstance(v, (float, int)) or hasattr(v, 'item') else v
+                     for k, v in val_metrics.items() if k not in ['predictions', 'targets', 'posteriors']}
+
+        history['train'].append(train_record)
+        history['val'].append(val_record)
 
         # Save checkpoint
         is_best = val_metrics['srcc'] > best_srcc
