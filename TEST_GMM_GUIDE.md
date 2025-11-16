@@ -4,6 +4,12 @@
 
 **重要提示**: 在 Colab 中运行 shell 命令需要在命令前加 `!` 前缀
 
+### 首次运行说明 / First-Time Setup
+- ⚠️ **首次运行会自动下载数据集**（STL10约2.5GB），需要几分钟时间
+- ⚠️ **First run will automatically download the dataset** (STL10 ~2.5GB), takes a few minutes
+- 数据集会保存在 `~/datasets/` 目录，下次运行不需要重新下载
+- Dataset will be saved in `~/datasets/`, no need to re-download on subsequent runs
+
 ### 步骤 1: 训练简单基线（无 GMM）/ Step 1: Train Simple Baseline (No GMM)
 
 在 Colab 单元格中运行：
@@ -73,12 +79,18 @@ python train_high_res.py \
 ### Q2: 如何查看训练结果？
 **A**: 训练完成后，结果会保存在 `experiments/` 目录下对应的实验名称文件夹中。
 
-### Q3: 可以修改哪些参数？
+### Q3: 首次运行时显示 "Downloading..." 是正常的吗？
+**A**: 是的！首次运行会自动下载 STL10 数据集（约2.5GB），这可能需要几分钟。下载完成后，数据集会保存在 `~/datasets/` 目录，以后运行就不需要重新下载了。
+
+### Q4: 可以修改哪些参数？
 **A**:
 - `--epochs`: 训练轮数（默认 50）
 - `--n_clusters`: GMM 聚类数（仅 GMM 模型，推荐 3-10）
 - `--batch_size`: 批次大小（默认 32）
 - `--learning_rate`: 学习率（默认 0.001）
+
+### Q5: 如果遇到 "Dataset 'stl10' doesn't exist on the Hub" 错误怎么办？
+**A**: 这个问题已经修复！现在使用 torchvision 直接下载 STL10 数据集，不再依赖 Hugging Face Hub。请确保你使用的是最新版本的代码。
 
 ---
 

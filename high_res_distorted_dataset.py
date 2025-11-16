@@ -57,8 +57,6 @@ class HighResDistortedDataset(Dataset):
             distortion_strength: 'light' (0.1-0.4), 'medium' (0.2-0.6), 'heavy' (0.3-1.0)
         """
         try:
-            from datasets import load_dataset
-
             self.dataset_name = dataset_name
             self.distortion_strength = distortion_strength
 
@@ -76,21 +74,62 @@ class HighResDistortedDataset(Dataset):
             # Load dataset based on name
             if dataset_name == 'stl10':
                 # STL-10: 96x96 images, 10 classes
+                # Use torchvision for STL10
+                from torchvision.datasets import STL10
+                import os
+
                 dataset_split = 'train' if split == 'train' else 'test'
-                dataset = load_dataset("stl10", split=dataset_split)
+                stl10_dataset = STL10(
+                    root=os.path.expanduser('~/datasets'),
+                    split=dataset_split,
+                    download=True
+                )
+
+                # Convert to list of dicts for compatibility
+                dataset = []
+                for i in range(len(stl10_dataset)):
+                    img, label = stl10_dataset[i]
+                    dataset.append({'image': img, 'label': label})
+
+                print(f"Loaded {len(dataset)} images from STL10")
+
+            elif dataset_name == 'cifar10':
+                # CIFAR-10: 32x32 images (for comparison)
+                from torchvision.datasets import CIFAR10
+                import os
+
+                dataset_split = (split == 'train')
+                cifar_dataset = CIFAR10(
+                    root=os.path.expanduser('~/datasets'),
+                    train=dataset_split,
+                    download=True
+                )
+
+                # Convert to list of dicts
+                dataset = []
+                for i in range(len(cifar_dataset)):
+                    img, label = cifar_dataset[i]
+                    dataset.append({'image': img, 'label': label})
+
+                print(f"Loaded {len(dataset)} images from CIFAR10")
+
             elif dataset_name == 'imagenet-1k':
                 # ImageNet-1k: high-res images (usually 200x200+)
                 # Note: This requires authentication, use a subset if not available
+                from datasets import load_dataset
                 try:
-                    dataset = load_dataset("imagenet-1k", split=split, trust_remote_code=True)
+                    hf_dataset = load_dataset("imagenet-1k", split=split, trust_remote_code=True)
                 except:
                     print("WARNING: Full ImageNet-1k not available, using tiny-imagenet instead...")
-                    dataset = load_dataset("Maysee/tiny-imagenet", split=split)
+                    hf_dataset = load_dataset("Maysee/tiny-imagenet", split=split)
+
+                # Convert to list
+                dataset = [item for item in hf_dataset]
             else:
                 raise ValueError(f"Unknown dataset: {dataset_name}")
 
-            if max_samples:
-                dataset = dataset.select(range(min(max_samples, len(dataset))))
+            if max_samples and len(dataset) > max_samples:
+                dataset = dataset[:max_samples]
 
             self.reference_images = []
             self.distorted_images = []
@@ -309,24 +348,43 @@ def visualize_high_res_distortions(dataset_name='stl10', distortion_strength='me
     Helper function to visualize different distortion types on high-res images.
     """
     import matplotlib.pyplot as plt
-    from datasets import load_dataset
+    import os
 
     # Load one sample image
     print(f"Loading sample image from {dataset_name}...")
     if dataset_name == 'stl10':
-        dataset = load_dataset("stl10", split='train')
+        from torchvision.datasets import STL10
+        stl10_dataset = STL10(
+            root=os.path.expanduser('~/datasets'),
+            split='train',
+            download=True
+        )
+        img, _ = stl10_dataset[0]
+
+    elif dataset_name == 'cifar10':
+        from torchvision.datasets import CIFAR10
+        cifar_dataset = CIFAR10(
+            root=os.path.expanduser('~/datasets'),
+            train=True,
+            download=True
+        )
+        img, _ = cifar_dataset[0]
+
     elif dataset_name == 'imagenet-1k':
+        from datasets import load_dataset
         try:
             dataset = load_dataset("imagenet-1k", split='train')
         except:
             print("Using tiny-imagenet instead...")
             dataset = load_dataset("Maysee/tiny-imagenet", split='train')
 
-    # Get image
-    if 'image' in dataset[0]:
-        img = dataset[0]['image']
-    elif 'img' in dataset[0]:
-        img = dataset[0]['img']
+        # Get image
+        if 'image' in dataset[0]:
+            img = dataset[0]['image']
+        elif 'img' in dataset[0]:
+            img = dataset[0]['img']
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
 
     if not isinstance(img, Image.Image):
         img = Image.fromarray(img)
