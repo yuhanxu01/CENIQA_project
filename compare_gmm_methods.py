@@ -437,7 +437,7 @@ def train_epoch(model, dataloader, optimizer, device):
         total_loss += loss.item() * images.size(0)
         total_samples += images.size(0)
 
-        if batch_idx % 5 == 0:  # 更频繁打印进度
+        if batch_idx % 50 == 0:  # 每50个batch打印一次
             print(f"  Batch {batch_idx}/{len(dataloader)}, Loss: {loss.item():.4f}")
 
     return total_loss / total_samples
@@ -511,16 +511,16 @@ def train_and_evaluate(model_name, model, train_loader, val_loader, device, epoc
         val_srcc, val_plcc = evaluate(model, val_loader, device)
         print(f"Validation SRCC: {val_srcc:.4f}, PLCC: {val_plcc:.4f}")
 
-        # 记录
-        results['train_losses'].append(train_loss)
-        results['val_srcc'].append(val_srcc)
-        results['val_plcc'].append(val_plcc)
+        # 记录 - 转换为Python原生类型
+        results['train_losses'].append(float(train_loss))
+        results['val_srcc'].append(float(val_srcc))
+        results['val_plcc'].append(float(val_plcc))
 
         # 更新最佳
         if val_srcc > best_srcc:
             best_srcc = val_srcc
-            results['best_srcc'] = val_srcc
-            results['best_plcc'] = val_plcc
+            results['best_srcc'] = float(val_srcc)
+            results['best_plcc'] = float(val_plcc)
             # 保存最佳模型
             torch.save(model.state_dict(), f'checkpoints/{model_name}_best.pth')
 
@@ -551,13 +551,13 @@ def main():
     # 创建checkpoints目录
     os.makedirs('checkpoints', exist_ok=True)
 
-    # 数据集 - 快速测试配置
+    # 数据集 - 完整训练配置
     print("\n加载数据集...")
     train_dataset = HighResDistortedDatasetLazy(
         dataset_name='stl10',
         split='train',
-        max_samples=100,  # 减少到100样本快速测试
-        distortions_per_image=2,  # 减少distortion数量
+        max_samples=2000,  # 完整训练：2000个参考图像
+        distortions_per_image=5,  # 每张图5种变形
         include_pristine=True,
         distortion_strength='medium'
     )
@@ -565,14 +565,14 @@ def main():
     val_dataset = HighResDistortedDatasetLazy(
         dataset_name='stl10',
         split='test',
-        max_samples=50,  # 减少到50样本快速测试
-        distortions_per_image=2,
+        max_samples=500,  # 完整验证：500个参考图像
+        distortions_per_image=5,
         include_pristine=True,
         distortion_strength='medium'
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=2)  # 增大batch size
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=4, pin_memory=True)
 
     print(f"训练集: {len(train_dataset)} 样本")
     print(f"验证集: {len(val_dataset)} 样本")
@@ -586,8 +586,8 @@ def main():
         '方案5_Complete': CompleteCENIQA(config)
     }
 
-    # 训练参数 - 快速测试：只跑1个epoch
-    epochs = 1
+    # 训练参数 - 完整训练
+    epochs = 20  # 完整训练：20个epochs
     lr = 1e-4
 
     # 训练所有模型并记录结果
