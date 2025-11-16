@@ -551,12 +551,12 @@ def main():
     # 创建checkpoints目录
     os.makedirs('checkpoints', exist_ok=True)
 
-    # 数据集 - 完整训练配置
+    # 数据集 - 大规模训练配置
     print("\n加载数据集...")
     train_dataset = HighResDistortedDatasetLazy(
         dataset_name='stl10',
         split='train',
-        max_samples=2000,  # 完整训练：2000个参考图像
+        max_samples=None,  # 使用全部STL-10训练集 (5000张)
         distortions_per_image=5,  # 每张图5种变形
         include_pristine=True,
         distortion_strength='medium'
@@ -565,7 +565,7 @@ def main():
     val_dataset = HighResDistortedDatasetLazy(
         dataset_name='stl10',
         split='test',
-        max_samples=500,  # 完整验证：500个参考图像
+        max_samples=None,  # 使用全部STL-10测试集 (8000张)
         distortions_per_image=5,
         include_pristine=True,
         distortion_strength='medium'
@@ -586,8 +586,8 @@ def main():
         '方案5_Complete': CompleteCENIQA(config)
     }
 
-    # 训练参数 - 完整训练
-    epochs = 20  # 完整训练：20个epochs
+    # 训练参数 - 大规模训练
+    epochs = 60  # 大规模训练：60个epochs (20 x 3)
     lr = 1e-4
 
     # 训练所有模型并记录结果
