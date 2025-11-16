@@ -14,7 +14,62 @@ import time
 
 from high_res_distorted_dataset import HighResDistortedDataset
 from simple_model import SimpleCNNModel
-from train_gpu import validate, save_checkpoint
+import numpy as np
+from scipy.stats import spearmanr, pearsonr
+
+
+def validate(model, dataloader, criterion, device):
+    """
+    Validate the model and compute metrics.
+    """
+    model.eval()
+    total_loss = 0
+    predictions = []
+    targets = []
+
+    with torch.no_grad():
+        for images, scores in dataloader:
+            images = images.to(device)
+            scores = scores.to(device)
+
+            preds = model(images)
+            loss = criterion(preds, scores)
+
+            total_loss += loss.item()
+            predictions.extend(preds.cpu().numpy())
+            targets.extend(scores.cpu().numpy())
+
+    predictions = np.array(predictions)
+    targets = np.array(targets)
+
+    # Compute metrics
+    srcc, _ = spearmanr(predictions, targets)
+    plcc, _ = pearsonr(predictions, targets)
+    rmse = np.sqrt(np.mean((predictions - targets) ** 2))
+
+    return {
+        'loss': total_loss / len(dataloader),
+        'srcc': srcc,
+        'plcc': plcc,
+        'rmse': rmse
+    }
+
+
+def save_checkpoint(model, optimizer, epoch, metrics, save_path, is_best=False, best_path=None):
+    """
+    Save model checkpoint.
+    """
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'metrics': metrics
+    }
+
+    torch.save(checkpoint, save_path)
+
+    if is_best and best_path is not None:
+        torch.save(checkpoint, best_path)
 
 
 def train_epoch_simple(model, dataloader, optimizer, criterion, device):

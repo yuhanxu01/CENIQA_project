@@ -19,7 +19,132 @@ from tqdm import tqdm
 import time
 
 from high_res_distorted_dataset import HighResDistortedDataset
-from train_gpu import SimpleCNNGMMMLPModel, validate, save_checkpoint
+from scipy.stats import spearmanr, pearsonr
+from sklearn.mixture import GaussianMixture
+
+
+class SimpleCNNGMMMLPModel(nn.Module):
+    """
+    Simple CNN + GMM + MLP model for image quality assessment.
+    """
+    def __init__(self, backbone_name='resnet18', n_clusters=5, feature_dim=512,
+                 hidden_dim=512, dropout=0.3, freeze_backbone=False):
+        super().__init__()
+
+        # Backbone
+        if backbone_name == 'resnet18':
+            from torchvision.models import resnet18, ResNet18_Weights
+            backbone = resnet18(weights=ResNet18_Weights.DEFAULT)
+            backbone.fc = nn.Identity()
+        elif backbone_name == 'resnet34':
+            from torchvision.models import resnet34, ResNet34_Weights
+            backbone = resnet34(weights=ResNet34_Weights.DEFAULT)
+            backbone.fc = nn.Identity()
+        elif backbone_name == 'resnet50':
+            from torchvision.models import resnet50, ResNet50_Weights
+            backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
+            backbone.fc = nn.Identity()
+        else:
+            raise ValueError(f"Unknown backbone: {backbone_name}")
+
+        self.backbone = backbone
+        self.feature_dim = feature_dim
+        self.n_clusters = n_clusters
+
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
+        # GMM (sklearn, not differentiable)
+        self.gmm = GaussianMixture(n_components=n_clusters, covariance_type='full')
+        self.gmm_fitted = False
+
+        # MLP regressor
+        self.regressor = nn.Sequential(
+            nn.Linear(feature_dim + n_clusters, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # Extract features
+        features = self.backbone(x)
+
+        # Get GMM cluster probabilities
+        if self.gmm_fitted:
+            cluster_probs = torch.from_numpy(
+                self.gmm.predict_proba(features.detach().cpu().numpy())
+            ).float().to(x.device)
+        else:
+            # If GMM not fitted yet, use zeros
+            cluster_probs = torch.zeros(x.size(0), self.n_clusters).to(x.device)
+
+        # Concatenate features and cluster probabilities
+        combined = torch.cat([features, cluster_probs], dim=1)
+
+        # Predict quality
+        quality = self.regressor(combined)
+
+        return quality.squeeze()
+
+
+def validate(model, dataloader, criterion, device):
+    """
+    Validate the model and compute metrics.
+    """
+    model.eval()
+    total_loss = 0
+    predictions = []
+    targets = []
+
+    with torch.no_grad():
+        for images, scores in dataloader:
+            images = images.to(device)
+            scores = scores.to(device)
+
+            preds = model(images)
+            loss = criterion(preds, scores)
+
+            total_loss += loss.item()
+            predictions.extend(preds.cpu().numpy())
+            targets.extend(scores.cpu().numpy())
+
+    predictions = np.array(predictions)
+    targets = np.array(targets)
+
+    # Compute metrics
+    srcc, _ = spearmanr(predictions, targets)
+    plcc, _ = pearsonr(predictions, targets)
+    rmse = np.sqrt(np.mean((predictions - targets) ** 2))
+
+    return {
+        'loss': total_loss / len(dataloader),
+        'srcc': srcc,
+        'plcc': plcc,
+        'rmse': rmse
+    }
+
+
+def save_checkpoint(model, optimizer, epoch, metrics, save_path, is_best=False, best_path=None):
+    """
+    Save model checkpoint.
+    """
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'metrics': metrics
+    }
+
+    torch.save(checkpoint, save_path)
+
+    if is_best and best_path is not None:
+        torch.save(checkpoint, best_path)
 
 
 def refit_gmm(model, dataloader, device):
@@ -47,7 +172,8 @@ def refit_gmm(model, dataloader, device):
 
     # Re-fit GMM with sklearn
     try:
-        model.gmm.fit_sklearn(all_features)
+        model.gmm.fit(all_features)
+        model.gmm_fitted = True
         print(f"GMM re-fitted with {len(all_features)} samples")
 
         # Analyze cluster distribution
