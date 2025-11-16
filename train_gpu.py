@@ -236,14 +236,20 @@ def load_config(config_path):
     return config
 
 
-def save_checkpoint(model, optimizer, epoch, metrics, save_path):
+def save_checkpoint(model, optimizer, epoch, metrics, save_path, is_best=False, best_path=None):
     """Save model checkpoint."""
-    torch.save({
+    checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'metrics': metrics
-    }, save_path)
+    }
+
+    torch.save(checkpoint, save_path)
+
+    # If this is the best model, also save to best_path
+    if is_best and best_path is not None:
+        torch.save(checkpoint, best_path)
 
 
 def main():
