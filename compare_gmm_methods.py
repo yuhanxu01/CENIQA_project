@@ -551,25 +551,44 @@ def main():
     # 创建checkpoints目录
     os.makedirs('checkpoints', exist_ok=True)
 
-    # 数据集 - 大规模训练配置
+    # 数据集 - 90/10分割配置
     print("\n加载数据集...")
-    train_dataset = HighResDistortedDatasetLazy(
+
+    # 先加载所有训练数据作为基础
+    full_train_dataset = HighResDistortedDatasetLazy(
         dataset_name='stl10',
         split='train',
-        max_samples=None,  # 使用全部STL-10训练集 (5000张)
-        distortions_per_image=5,  # 每张图5种变形
-        include_pristine=True,
-        distortion_strength='medium'
-    )
-
-    val_dataset = HighResDistortedDatasetLazy(
-        dataset_name='stl10',
-        split='test',
-        max_samples=None,  # 使用全部STL-10测试集 (8000张)
+        max_samples=None,  # 5000张参考图
         distortions_per_image=5,
         include_pristine=True,
         distortion_strength='medium'
     )
+
+    # 加载测试数据
+    full_test_dataset = HighResDistortedDatasetLazy(
+        dataset_name='stl10',
+        split='test',
+        max_samples=None,  # 8000张参考图
+        distortions_per_image=5,
+        include_pristine=True,
+        distortion_strength='medium'
+    )
+
+    # 合并所有数据：5000 + 8000 = 13000张参考图
+    from torch.utils.data import ConcatDataset, random_split
+    combined_dataset = ConcatDataset([full_train_dataset, full_test_dataset])
+
+    # 90/10分割
+    total_size = len(combined_dataset)
+    train_size = int(0.9 * total_size)
+    val_size = total_size - train_size
+
+    print(f"\n合并数据集总计: {total_size} 样本 (13000张参考图 × 6)")
+    print(f"分割方案: 90% 训练集 ({train_size} 样本) / 10% 验证集 ({val_size} 样本)")
+
+    # 随机分割
+    generator = torch.Generator().manual_seed(42)  # 固定随机种子保证可复现
+    train_dataset, val_dataset = random_split(combined_dataset, [train_size, val_size], generator=generator)
 
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=4, pin_memory=True)
