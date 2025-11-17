@@ -10,9 +10,15 @@ cd /gpfs/scratch/rl5285/CENIQA_project  # 进入项目目录
 # 1. 创建必要目录
 mkdir -p logs results checkpoints
 
-# 2. 提交快速测试（7个方法，2 epochs）
-./submit_quick_test.sh
+# 2. 提交快速测试（1个node，7个方法串行，2 epochs）
+sbatch submit_quick_test.sh
 ```
+
+**快速测试说明：**
+- 申请1个GPU node
+- 7个方法串行运行（一个接一个）
+- 每个方法2 epochs
+- 总时间约3-5小时
 
 ### 监控快速测试
 
@@ -20,10 +26,8 @@ mkdir -p logs results checkpoints
 # 查看任务状态
 squeue -u $USER
 
-# 实时查看某个方法的输出
-tail -f logs/quick_no_gmm_*.out
-tail -f logs/quick_vanilla_gmm_*.out
-tail -f logs/quick_moe_*.out
+# 实时查看所有方法的输出（在一个日志文件中）
+tail -f logs/quick_test_all_*.out
 ```
 
 ### 检查快速测试结果
@@ -51,18 +55,25 @@ cat comparison_plots/quick_test/comparison_table.csv
 快速测试通过后，运行完整训练：
 
 ```bash
-# 提交完整训练（7个方法，60 epochs）
+# 提交完整训练（7个node并行，每个方法60 epochs）
 ./submit_full_training.sh
 ```
+
+**完整训练说明：**
+- 申请7个GPU nodes
+- 7个方法并行运行（同时运行）
+- 每个方法60 epochs
+- 总时间约8-12小时
 
 ### 监控完整训练
 
 ```bash
-# 查看任务状态
+# 查看任务状态（应该看到7个任务）
 squeue -u $USER
 
-# 查看训练进度
+# 查看特定方法的训练进度
 tail -f logs/full_moe_*.out
+tail -f logs/full_complete_*.out
 
 # 查看已保存的模型
 ls -lh checkpoints/full_training/*.pth
@@ -144,16 +155,16 @@ No GMM (Baseline)          0.45-0.60      0.45-0.60
 ## ✅ 完整流程总结
 
 ```bash
-# 1. 快速测试（必须！）
-./submit_quick_test.sh
-# 等待3-5小时
+# 1. 快速测试（1个node串行，必须先做！）
+sbatch submit_quick_test.sh
+# 等待3-5小时，7个方法串行运行
 
 # 2. 检查快速测试结果
 python compare_results.py --results_dir results/quick_test --output_dir comparison_plots/quick_test
 
-# 3. 确认无误后，开始完整训练
+# 3. 确认无误后，开始完整训练（7个node并行）
 ./submit_full_training.sh
-# 等待8-12小时
+# 等待8-12小时，7个方法并行运行
 
 # 4. 查看最终结果
 python compare_results.py --results_dir results/full_training --output_dir comparison_plots/full_training

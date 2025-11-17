@@ -39,30 +39,28 @@ CENIQA_project/
 # 创建必要的目录
 mkdir -p logs results checkpoints
 
-# 给脚本添加执行权限
-chmod +x submit_quick_test.sh
-
-# 提交快速测试任务（7个方法，每个2 epochs）
-./submit_quick_test.sh
+# 提交快速测试任务（1个node，7个方法串行，每个2 epochs）
+sbatch submit_quick_test.sh
 ```
 
 **快速测试配置：**
+- 申请资源: 1个GPU node
+- 运行方式: 7个方法串行运行（一个接一个）
 - Epochs: 2
 - 训练样本: 500张参考图 × 6 = 3000样本
 - 验证样本: 200张参考图 × 6 = 1200样本
-- 预计时间: 每个方法 ~30-45分钟
-- 总时间: ~3-5小时（并行运行）
+- 预计时间: 每个方法 ~30-45分钟，总计 ~3-5小时
 
 **监控任务：**
 ```bash
-# 查看任务状态
+# 查看任务状态（应该只有1个任务）
 squeue -u $USER
 
-# 查看实时日志
-tail -f logs/quick_*.out
+# 查看实时日志（所有7个方法在一个日志文件中）
+tail -f logs/quick_test_all_*.out
 
-# 查看特定方法的日志
-tail -f logs/quick_no_gmm_*.out
+# 查看完整日志
+cat logs/quick_test_all_*.out
 ```
 
 ### 步骤2: 检查快速测试结果
@@ -95,22 +93,23 @@ python compare_results.py \
 # 给脚本添加执行权限
 chmod +x submit_full_training.sh
 
-# 提交完整训练任务（7个方法，每个60 epochs）
+# 提交完整训练任务（7个node并行，每个方法60 epochs）
 ./submit_full_training.sh
 ```
 
 **完整训练配置：**
+- 申请资源: 7个GPU nodes
+- 运行方式: 7个方法并行运行（同时运行）
 - Epochs: 60
 - 训练集: ~11,700张参考图 × 6 = ~70,200样本 (90%)
 - 验证集: ~1,300张参考图 × 6 = ~7,800样本 (10%)
 - Batch size: 16
 - Learning rate: 1e-4
-- 预计时间: 每个方法 ~8-12小时
-- 总时间: ~8-12小时（并行运行）
+- 预计时间: 每个方法 ~8-12小时（并行运行，总时间不变）
 
 **监控任务：**
 ```bash
-# 查看任务状态
+# 查看任务状态（应该看到7个任务）
 squeue -u $USER
 
 # 查看特定方法的日志

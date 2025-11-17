@@ -39,13 +39,13 @@ USAGE_SUMMARY.txt               本文件
 
 步骤2: HPC快速测试（必须，3-5小时）
 ────────────────────────────────────────────────────────────────────────────
-./submit_quick_test.sh
+sbatch submit_quick_test.sh       # 1个node，7个方法串行
 # 等待完成后
 python compare_results.py --results_dir results/quick_test --output_dir comparison_plots/quick_test
 
 步骤3: 完整训练（8-12小时）
 ────────────────────────────────────────────────────────────────────────────
-./submit_full_training.sh
+./submit_full_training.sh          # 7个nodes，7个方法并行
 # 等待完成后
 python compare_results.py --results_dir results/full_training --output_dir comparison_plots/full_training
 
@@ -55,13 +55,21 @@ python compare_results.py --results_dir results/full_training --output_dir compa
 
 快速测试（验证环境）
 ────────────────────────────────────────────────────────────────────────────
+- 资源: 1个GPU node
+- 运行方式: 7个方法串行
 - Epochs: 2
 - 训练样本: 3,000 (500张参考图 × 6)
 - 验证样本: 1,200 (200张参考图 × 6)
-- 时间: 每个方法30-45分钟
-
 完整训练（最终结果）
 ────────────────────────────────────────────────────────────────────────────
+- 资源: 7个GPU nodes
+- 运行方式: 7个方法并行
+- Epochs: 60
+- 训练集: 70,200样本 (90%)
+- 验证集: 7,800样本 (10%)
+- Batch size: 16
+- Learning rate: 1e-4
+- 时间: 8-12小时（并行运行）
 - Epochs: 60
 - 训练集: 70,200样本 (90%)
 - 验证集: 7,800样本 (10%)
@@ -110,8 +118,8 @@ squeue -u $USER
 
 查看实时日志
 ────────────────────────────────────────────────────────────────────────────
-tail -f logs/quick_moe_*.out
-tail -f logs/full_complete_*.out
+tail -f logs/quick_test_all_*.out    # 快速测试（所有方法在一个日志）
+tail -f logs/full_complete_*.out     # 完整训练（每个方法独立日志）
 
 取消任务
 ────────────────────────────────────────────────────────────────────────────
